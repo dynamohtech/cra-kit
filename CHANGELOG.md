@@ -3,6 +3,12 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- No Python traceback when output is piped into a command that stops reading early (for example `| head`).
+
 ## [0.1.0] - 2026-09-30
 
 ### Added

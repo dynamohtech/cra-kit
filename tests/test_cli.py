@@ -146,3 +146,12 @@ def test_report_errors(project, capsys):
     err = capsys.readouterr().err
     assert "earlier than --aware" in err and "not an ISO 8601" in err and "not found in the scan file" in err
     assert main(["report"]) == 2
+
+
+def test_broken_pipe_exits_quietly(tmp_path):
+    shutil.copy(FIXTURES / "npm-v3" / "package-lock.json", tmp_path)
+    proc = subprocess.Popen([sys.executable, "-m", "cra_kit", "sbom", "-o", str(tmp_path / "s.json"), str(tmp_path)],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc.stdout.close()  # the reader goes away before cra-kit writes
+    _, err = proc.communicate(timeout=60)
+    assert b"Traceback" not in err

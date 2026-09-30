@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tomllib
 import urllib.error
@@ -30,6 +31,20 @@ class CliError(Exception):
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _run(argv)
+    except BrokenPipeError:
+        # Output was piped into a command that stopped reading (e.g. `| head`).
+        # Point stdout at devnull so the interpreter's final flush stays quiet.
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError, AttributeError):
+            pass
+        return EXIT_ERROR
+
+
+def _run(argv: list[str] | None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
