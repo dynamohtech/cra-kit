@@ -83,7 +83,9 @@ class FakeTransport:
                 raise OSError("network unreachable")
             results = []
             for query in body["queries"]:
-                ids = OSV_HITS.get(query["package"]["purl"], [])
+                pkg = query["package"]
+                key = pkg.get("purl") or f"go:{pkg['name']}@{query['version']}"
+                ids = OSV_HITS.get(key, [])
                 results.append({"vulns": [{"id": i, "modified": "2026-01-01T00:00:00Z"} for i in ids]} if ids else {})
             return {"results": results}
         if url.startswith("https://api.osv.dev/v1/vulns/"):

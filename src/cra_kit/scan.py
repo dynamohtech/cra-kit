@@ -92,7 +92,7 @@ def scan(purls: list[str], transport: Transport = http_transport, check_kev: boo
     errors: list[str] = []
     for start in range(0, len(purls), BATCH_SIZE):
         chunk = purls[start:start + BATCH_SIZE]
-        payload = {"queries": [{"package": {"purl": p}} for p in chunk]}
+        payload = {"queries": [osv_query(p) for p in chunk]}
         response = transport("POST", OSV_BATCH_URL, payload)
         results = response.get("results", [])
         if len(results) != len(chunk):
@@ -136,6 +136,21 @@ def scan(purls: list[str], transport: Transport = http_transport, check_kev: boo
     order = {"CRITICAL": 0, "HIGH": 1, "MODERATE": 2, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4}
     findings.sort(key=lambda f: (not f.known_exploited, order.get(f.severity, 4), f.purl, f.id))
     return ScanResult(scanned=len(purls), findings=findings, kev_checked=kev_checked, errors=errors)
+
+
+def osv_query(purl: str) -> dict:
+    """OSV.dev query for one component.
+
+    Go modules are queried by ecosystem, module path and version without the
+    leading "v" (the form OSV's Go records use, and what osv-scanner sends).
+    Everything else is queried by its versioned purl.
+    """
+    if purl.startswith("pkg:golang/") and "@" in purl:
+        from urllib.parse import unquote
+
+        path, _, version = purl[len("pkg:golang/"):].split("?", 1)[0].split("#", 1)[0].rpartition("@")
+        return {"package": {"ecosystem": "Go", "name": unquote(path)}, "version": unquote(version).removeprefix("v")}
+    return {"package": {"purl": purl}}
 
 
 def purl_key(purl: str) -> tuple[str, str]:

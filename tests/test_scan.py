@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from cra_kit import scan as scan_mod
-from cra_kit.scan import purl_key, scan, to_markdown
+from cra_kit.scan import osv_query, purl_key, scan, to_markdown
 
 from conftest import FakeTransport
 
@@ -94,3 +94,17 @@ def test_scan_rejects_misaligned_osv_response():
 
     with pytest.raises(ValueError, match="returned 1 results for 2 components"):
         scan(["pkg:npm/a@1.0.0", "pkg:npm/b@1.0.0"], transport=short)
+
+
+@pytest.mark.parametrize(
+    ("purl", "query"),
+    [
+        ("pkg:npm/%40babel/core@7.23.0", {"package": {"purl": "pkg:npm/%40babel/core@7.23.0"}}),
+        ("pkg:golang/github.com/gin-gonic/gin@v1.9.1",
+         {"package": {"ecosystem": "Go", "name": "github.com/gin-gonic/gin"}, "version": "1.9.1"}),
+        ("pkg:golang/golang.org/x/net@v0.0.0-20210405180319-a5a99cb37ef4",
+         {"package": {"ecosystem": "Go", "name": "golang.org/x/net"}, "version": "0.0.0-20210405180319-a5a99cb37ef4"}),
+    ],
+)
+def test_osv_query(purl, query):
+    assert osv_query(purl) == query
