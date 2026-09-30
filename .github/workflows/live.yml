@@ -22,7 +22,13 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e ".[dev]"
       - name: Live tests
-        run: python -m pytest -v tests/test_live.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -v -rs tests/test_live.py | tee live.txt
+          # Fail if any live test was skipped instead of run.
+          if grep -qE "[0-9]+ skipped" live.txt; then echo "Live tests were skipped"; exit 1; fi
+          grep -E "passed" live.txt | tail -1 >> "$GITHUB_STEP_SUMMARY"
         env:
           CRA_KIT_LIVE: "1"
       - name: Scan a fixture project against live data
