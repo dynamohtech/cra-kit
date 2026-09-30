@@ -4,9 +4,11 @@ cra-kit helps manufacturers handle vulnerabilities, so it follows the same pract
 
 ## Reporting a vulnerability
 
-Please report security issues privately through GitHub:
-**Security → Report a vulnerability** on this repository
-(<https://github.com/dynamohtech/cra-kit/security/advisories/new>).
+Please report security issues privately, in either of these ways:
+
+- **GitHub (preferred):** **Security → Report a vulnerability** on this repository
+  (<https://github.com/dynamohtech/cra-kit/security/advisories/new>).
+- **Email:** [dynamohtech24@gmail.com](mailto:dynamohtech24@gmail.com), with "cra-kit security" in the subject.
 
 Do not open a public issue for a security problem.
 
