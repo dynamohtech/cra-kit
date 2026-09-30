@@ -1,0 +1,12 @@
+# Example settings for a fictional product. Copy to your project root as
+# cra-kit.toml (or run `cra-kit init`) and replace every value.
+
+[product]
+name = "Example Smart Lock Hub"
+version = "2.4.0"
+manufacturer = "Example Devices BV"
+type = "device"
+security_contact = "security@example-devices.test"
+support_period_end = "2031-12-31"
+member_states = ["NL", "BE", "DE", "FR"]
+main_establishment = "NL"

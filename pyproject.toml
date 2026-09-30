@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cra-kit"
+version = "0.1.0"
+description = "Open-source toolkit for EU Cyber Resilience Act compliance: SBOMs, vulnerability checks, readiness reports and incident reporting templates."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Emmanuel Adegbaju" }]
+keywords = [
+  "cyber-resilience-act", "cra", "sbom", "cyclonedx", "vulnerability",
+  "compliance", "osv", "security", "eu",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+  "Topic :: Software Development :: Quality Assurance",
+]
+# No runtime dependencies on purpose: a compliance tool should be easy to
+# review and should not drag a large supply chain into your build.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "cyclonedx-python-lib[json-validation]>=8"]
+
+[project.scripts]
+cra-kit = "cra_kit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dynamohtech/cra-kit"
+Issues = "https://github.com/dynamohtech/cra-kit/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

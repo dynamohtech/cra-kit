@@ -1,0 +1,123 @@
+# cra-kit readiness answers. Fill in, then run:
+#   cra-kit assess --answers this-file.toml [--sbom sbom.cdx.json] [--scan scan.json]
+# Scope answers: "yes", "no" or "unsure".
+# Requirement answers: "done", "partial", "no" or "n/a".
+# This is a structured checklist, not legal advice. Regulation text:
+# https://eur-lex.europa.eu/eli/reg/2024/2847/oj
+
+[scope]
+# Is it software, or hardware with software in it (a 'product with digital elements')?
+digital_elements = "yes"
+# Is it intended, or reasonably expected, to connect directly or indirectly to a device or network? (Article 2(1))
+data_connection = "yes"
+# Is it, or will it be, made available on the EU market?
+eu_market = "yes"
+# Is it supplied in the course of a commercial activity (sold, or free but monetised, e.g. through support or data)?
+commercial = "yes"
+# Is it ONLY a service you run in the cloud, with no software or device delivered to customers?
+saas_only = "no"
+# Is it free and open-source software?
+open_source = "no"
+
+[exclusions]
+# Article 2: products covered by these rules are outside the CRA.
+# Is it a medical device or in vitro diagnostic medical device? (Article 2(2): Regulations (EU) 2017/745 and 2017/746)
+medical = "no"
+# Is it covered by motor vehicle type-approval rules? (Article 2(2): Regulation (EU) 2019/2144)
+vehicle = "no"
+# Is it certified under the EU civil aviation safety rules? (Article 2(3): Regulation (EU) 2018/1139)
+aviation = "no"
+# Is it marine equipment? (Article 2(4): Directive 2014/90/EU)
+marine = "no"
+# Was it developed or modified exclusively for national security or defence, or to process classified information? (Article 2(7))
+defence = "no"
+# Is it a spare part replacing an identical component, made to the same specifications? (Article 2(6))
+spare_part = "no"
+
+[classification]
+# List the numbers of any category that matches the product's CORE functionality.
+# Annex III, Class I:
+#  1. Identity management systems and privileged access management software and hardware, including authentication and access control readers, including biometric readers
+#  2. Standalone and embedded browsers
+#  3. Password managers
+#  4. Software that searches for, removes, or quarantines malicious software
+#  5. Products with digital elements with the function of virtual private network (VPN)
+#  6. Network management systems
+#  7. Security information and event management (SIEM) systems
+#  8. Boot managers
+#  9. Public key infrastructure and digital certificate issuance software
+#  10. Physical and virtual network interfaces
+#  11. Operating systems
+#  12. Routers, modems intended for the connection to the internet, and switches
+#  13. Microprocessors with security-related functionalities
+#  14. Microcontrollers with security-related functionalities
+#  15. Application specific integrated circuits (ASIC) and field-programmable gate arrays (FPGA) with security-related functionalities
+#  16. Smart home general purpose virtual assistants
+#  17. Smart home products with security functionalities, including smart door locks, security cameras, baby monitoring systems and alarm systems
+#  18. Internet connected toys covered by Directive 2009/48/EC that have social interactive features or location tracking features
+#  19. Personal wearable products with a health monitoring purpose not covered by Regulation (EU) 2017/745 or (EU) 2017/746, or personal wearable products intended for use by and for children
+annex_iii_class_i = [17]
+# Annex III, Class II:
+#  1. Hypervisors and container runtime systems that support virtualised execution of operating systems and similar environments
+#  2. Firewalls, intrusion detection and prevention systems
+#  3. Tamper-resistant microprocessors
+#  4. Tamper-resistant microcontrollers
+annex_iii_class_ii = []
+# Annex IV, critical:
+#  1. Hardware devices with security boxes
+#  2. Smart meter gateways within smart metering systems and other devices for advanced security purposes, including for secure cryptoprocessing
+#  3. Smartcards or similar devices, including secure elements
+annex_iv = []
+
+[requirements]
+# Annex I, Part I: product properties
+# Designed, developed and produced to ensure an appropriate level of cybersecurity based on the risks
+"I.1" = "partial"
+# Made available on the market without known exploitable vulnerabilities
+"I.2a" = ""
+# Made available with a secure by default configuration, including the possibility to reset to the original state
+"I.2b" = "done"
+# Vulnerabilities can be addressed through security updates (automatic updates by default where applicable, with an opt-out)
+"I.2c" = "done"
+# Protection from unauthorised access by appropriate control mechanisms (authentication, identity or access management)
+"I.2d" = "done"
+# Confidentiality of stored, transmitted or otherwise processed data protected (e.g. encryption)
+"I.2e" = "done"
+# Integrity of stored, transmitted or otherwise processed data, commands, programs and configuration protected
+"I.2f" = "partial"
+# Only data that is adequate, relevant and limited to what is necessary is processed (data minimisation)
+"I.2g" = "done"
+# Availability of essential and basic functions protected, including resilience against denial-of-service attacks
+"I.2h" = "partial"
+# Negative impact on the availability of services provided by other devices or networks is minimised
+"I.2i" = "n/a"
+# Designed, developed and produced to limit attack surfaces, including external interfaces
+"I.2j" = "partial"
+# Designed, developed and produced to reduce the impact of an incident using exploitation mitigation mechanisms
+"I.2k" = "no"
+# Security-related information provided by recording and monitoring relevant internal activity, with a user opt-out
+"I.2l" = "no"
+# Users can securely and easily remove all data and settings permanently; where data can be transferred to other products or systems, this is done securely
+"I.2m" = "done"
+# Annex I, Part II: vulnerability handling
+# Identify and document vulnerabilities and components, including a software bill of materials in a commonly used, machine-readable format covering at the very least the top-level dependencies
+"II.1" = ""
+# Address and remediate vulnerabilities without delay, including by providing security updates (separately from functionality updates where technically feasible)
+"II.2" = "partial"
+# Apply effective and regular tests and reviews of the security of the product
+"II.3" = "partial"
+# Once a security update is available, share and publicly disclose information about fixed vulnerabilities (description, affected products, impact, severity, remediation)
+"II.4" = "no"
+# Put in place and enforce a policy on coordinated vulnerability disclosure
+"II.5" = "no"
+# Facilitate the sharing of information about potential vulnerabilities, including a contact address for reporting them
+"II.6" = ""
+# Provide mechanisms to securely distribute updates so vulnerabilities are fixed or mitigated in a timely and, where applicable, automatic manner
+"II.7" = "done"
+# Disseminate security updates without delay and free of charge (unless otherwise agreed with a business user for a tailor-made product), with advisory messages
+"II.8" = "done"
+
+[notes]
+# Optional evidence per requirement, e.g.
+# "II.5" = "Policy at https://example.com/security"
+"I.2c" = "Signed OTA updates, automatic by default, opt-out in the app"

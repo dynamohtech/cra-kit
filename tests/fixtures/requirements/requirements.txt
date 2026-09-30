@@ -1,0 +1,10 @@
+# Production dependencies
+Django==4.2.7
+requests[socks]==2.31.0 ; python_version >= "3.8"  # HTTP client
+urllib3==2.0.7 \
+    --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000
+flask>=2.0
+--index-url https://pypi.org/simple
+-e ./local-package
+git+https://github.com/example/tool.git#egg=tool
+-r base.txt

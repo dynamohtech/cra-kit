@@ -1,0 +1,4 @@
+[project]
+name = "poetry-demo"
+version = "2.0.0"
+dependencies = ["Flask (>=3.0,<4.0)", "pydantic>=2"]
