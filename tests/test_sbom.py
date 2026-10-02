@@ -167,7 +167,7 @@ def test_collect_folder_warns_about_unsupported_files():
     purls = {c.purl for c in result.deduplicated()}
     assert "pkg:npm/express@4.18.2" in purls
     assert "pkg:pypi/requests@2.31.0" in purls
-    assert any("pnpm-lock.yaml" in w and "NOT in the SBOM" in w for w in result.warnings)
+    assert any("bun.lock" in w and "NOT in the SBOM" in w for w in result.warnings)
 
 
 def test_requirements_skipped_when_lockfile_present(tmp_path):

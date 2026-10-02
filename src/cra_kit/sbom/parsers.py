@@ -61,10 +61,11 @@ def _parse_npm_v2(packages: dict, path: Path, include_dev: bool, result: ParseRe
         version = entry.get("version")
         if not version:
             continue
-        name = entry.get("name") or _npm_name_from_key(key)
-        is_top_level = key == f"node_modules/{name}"
+        install_name = _npm_name_from_key(key)  # the folder name; differs from "name" for aliases
+        name = entry.get("name") or install_name
+        is_top_level = key == f"node_modules/{install_name}"
         result.components.append(
-            Component("npm", name, version, direct=is_top_level and name in direct_names, source=str(path))
+            Component("npm", name, version, direct=is_top_level and install_name in direct_names, source=str(path))
         )
 
 

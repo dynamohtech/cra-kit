@@ -33,7 +33,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "cyclonedx-python-lib[json-validation]>=8"]
+dev = ["pytest>=8", "cyclonedx-python-lib[json-validation]>=8", "pyyaml>=6"]
 
 [project.scripts]
 cra-kit = "cra_kit.cli:main"

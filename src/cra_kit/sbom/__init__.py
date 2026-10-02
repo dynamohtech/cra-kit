@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 from cra_kit.model import ParseResult
-from cra_kit.sbom import parsers
+from cra_kit.sbom import jslocks, parsers
 
 SKIP_DIRS = {
     ".git", ".hg", ".svn", "node_modules", ".venv", "venv", "env", "__pycache__",
@@ -19,6 +19,8 @@ SKIP_DIRS = {
 SUPPORTED = {
     "package-lock.json": "npm",
     "npm-shrinkwrap.json": "npm",
+    "pnpm-lock.yaml": "pnpm",
+    "yarn.lock": "yarn",
     "poetry.lock": "poetry",
     "Pipfile.lock": "pipfile",
     "uv.lock": "uv",
@@ -29,7 +31,7 @@ SUPPORTED = {
 
 # Files we recognise but cannot read yet, so we can say so instead of
 # silently producing an incomplete SBOM.
-NOT_YET_SUPPORTED = ["yarn.lock", "pnpm-lock.yaml", "bun.lockb", "bun.lock", "composer.lock",
+NOT_YET_SUPPORTED = ["bun.lockb", "bun.lock", "composer.lock",
                      "Gemfile.lock", "pom.xml", "build.gradle", "build.gradle.kts", "packages.lock.json"]
 
 
@@ -74,8 +76,8 @@ def collect(root: Path, include_dev: bool = False) -> ParseResult:
         )
     if not files:
         result.warnings.append(
-            "no supported dependency files found (looked for package-lock.json, poetry.lock, "
-            "Pipfile.lock, uv.lock, requirements*.txt, Cargo.lock, go.mod)"
+            "no supported dependency files found (looked for package-lock.json, pnpm-lock.yaml, yarn.lock, "
+            "poetry.lock, Pipfile.lock, uv.lock, requirements*.txt, Cargo.lock, go.mod)"
         )
     return result
 
@@ -90,6 +92,10 @@ def _kind_for(path: Path) -> str | None:
 def _parse(path: Path, kind: str, include_dev: bool) -> ParseResult:
     if kind == "npm":
         return parsers.parse_npm_lock(path, include_dev)
+    if kind == "pnpm":
+        return jslocks.parse_pnpm_lock(path, include_dev)
+    if kind == "yarn":
+        return jslocks.parse_yarn_lock(path, include_dev)
     if kind == "poetry":
         return parsers.parse_poetry_lock(path, include_dev)
     if kind == "pipfile":
