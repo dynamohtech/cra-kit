@@ -253,6 +253,12 @@ def assess(
         r = by_id["I.2a"]
         vulnerable = scan_summary.get("vulnerable_components", 0)
         kev = scan_summary.get("known_exploited_count", 0)
+        closed = scan_summary.get("closed_by_vex_count", 0)
+        if closed:
+            r.evidence = "; ".join(x for x in (r.evidence, (
+                f"{closed} dependency advisories closed by recorded VEX decisions "
+                f"({', '.join(scan_summary.get('vex_sources') or []) or 'VEX file'})"
+            )) if x)
         if vulnerable:
             r.status = "at-risk"
             r.evidence = "; ".join(x for x in (r.evidence, (

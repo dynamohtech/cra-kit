@@ -52,6 +52,12 @@ class Finding:
     known_exploited: bool = False
     kev_date_added: str = ""
     url: str = ""
+    vex: dict | None = None  # the VEX decision covering this finding, if any
+
+    @property
+    def closed(self) -> bool:
+        """True when a VEX statement says the product is not affected or the issue is fixed."""
+        return bool(self.vex) and self.vex.get("status") in ("not_affected", "fixed")
 
     @property
     def cves(self) -> list[str]:
@@ -65,22 +71,35 @@ class ScanResult:
     findings: list[Finding]
     kev_checked: bool
     errors: list[str] = field(default_factory=list)
+    vex_sources: list[str] = field(default_factory=list)
+
+    @property
+    def open_findings(self) -> list[Finding]:
+        """Findings not closed by a VEX statement: these count, and --fail-on acts on them."""
+        return [f for f in self.findings if not f.closed]
+
+    @property
+    def closed_findings(self) -> list[Finding]:
+        return [f for f in self.findings if f.closed]
 
     @property
     def vulnerable_components(self) -> int:
-        return len({f.purl for f in self.findings})
+        return len({f.purl for f in self.open_findings})
 
     @property
     def known_exploited(self) -> list[Finding]:
-        return [f for f in self.findings if f.known_exploited]
+        return [f for f in self.open_findings if f.known_exploited]
 
     def to_dict(self) -> dict:
         return {
             "tool": {"name": "cra-kit", "version": __version__},
             "scanned_components": self.scanned,
             "vulnerable_components": self.vulnerable_components,
-            "findings": [asdict(f) | {"cves": f.cves} for f in self.findings],
+            "findings": [asdict(f) | {"cves": f.cves, "closed_by_vex": f.closed} for f in self.findings],
+            "open_findings_count": len(self.open_findings),
             "known_exploited_count": len(self.known_exploited),
+            "closed_by_vex_count": len(self.closed_findings),
+            "vex_sources": self.vex_sources,
             "kev_checked": self.kev_checked,
             "errors": self.errors,
         }
@@ -153,6 +172,10 @@ def osv_query(purl: str) -> dict:
     return {"package": {"purl": purl}}
 
 
+def _advisory_link(f: Finding) -> str:
+    return f"[{f.id}]({f.url})" + (f" ({', '.join(f.cves)})" if f.cves and f.cves != [f.id] else "")
+
+
 def purl_key(purl: str) -> tuple[str, str]:
     """('npm', '@scope/name') style identity of a purl, ignoring version and qualifiers."""
     from urllib.parse import unquote
@@ -203,10 +226,16 @@ def _to_finding(purl: str, vuln: dict) -> Finding:
 
 def to_markdown(result: ScanResult) -> str:
     lines = ["# Vulnerability scan", ""]
+    open_findings = result.open_findings
     lines.append(
         f"Scanned **{result.scanned}** components: **{result.vulnerable_components}** have known vulnerabilities "
-        f"({len(result.findings)} advisories)."
+        f"({len(open_findings)} open advisories)."
     )
+    if result.closed_findings:
+        lines.append(
+            f"**{len(result.closed_findings)}** more advisories are closed by VEX statements "
+            f"({', '.join(result.vex_sources)}) and listed separately below."
+        )
     if result.kev_checked:
         n = len(result.known_exploited)
         lines.append(
@@ -216,15 +245,27 @@ def to_markdown(result: ScanResult) -> str:
         )
     lines += ["", "| Component | Advisory | Severity | Exploited (KEV) | Fixed in | Summary |",
               "| --- | --- | --- | --- | --- | --- |"]
-    for f in result.findings:
-        advisory = f"[{f.id}]({f.url})" + (f" ({', '.join(f.cves)})" if f.cves and f.cves != [f.id] else "")
+    for f in open_findings:
         kev = f"Yes, since {f.kev_date_added}" if f.known_exploited else ("No" if result.kev_checked else "Not checked")
+        summary = f.summary.replace("|", "/")
+        if f.vex:
+            summary += f" (VEX: {f.vex['status'].replace('_', ' ')})"
         lines.append(
-            f"| `{f.purl}` | {advisory} | {f.severity} | {kev} | {', '.join(f.fixed_versions) or 'none listed'} "
-            f"| {f.summary.replace('|', '/')} |"
+            f"| `{f.purl}` | {_advisory_link(f)} | {f.severity} | {kev} | {', '.join(f.fixed_versions) or 'none listed'} "
+            f"| {summary} |"
         )
-    if not result.findings:
-        lines.append("| — | No known vulnerabilities | | | | |")
+    if not open_findings:
+        lines.append("| — | No open vulnerabilities | | | | |")
+    if result.closed_findings:
+        lines += ["", "## Closed by VEX", "",
+                  "| Component | Advisory | Status | Justification or statement | Decided |",
+                  "| --- | --- | --- | --- | --- |"]
+        for f in result.closed_findings:
+            why = f.vex.get("justification") or f.vex.get("impact_statement") or f.vex.get("action_statement") or ""
+            lines.append(
+                f"| `{f.purl}` | {_advisory_link(f)} | {f.vex['status'].replace('_', ' ')} "
+                f"| {why.replace('|', '/')} | {f.vex.get('timestamp', '')[:10]} |"
+            )
     if result.errors:
         lines += ["", "## Warnings", ""] + [f"- {e}" for e in result.errors]
     lines += ["", "_Sources: OSV.dev and CISA KEV. A listed advisory affects the component version; "

@@ -14,6 +14,7 @@ from pathlib import Path
 
 from cra_kit import __version__, assess as assess_mod, config, reporting
 from cra_kit import scan as scan_mod
+from cra_kit import vex as vex_mod
 from cra_kit.config import Product
 from cra_kit.sbom import collect
 from cra_kit.sbom.cyclonedx import build_bom, read_purls, summarize, write_bom
@@ -94,8 +95,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--include-dev", action="store_true", help="include development-only dependencies")
     p.add_argument("--no-kev", action="store_true", help="skip the CISA Known Exploited Vulnerabilities check")
     p.add_argument("--fail-on", choices=["none", "any", "kev"], default="none",
-                   help="exit with status 1 on any finding, or only on known-exploited ones (default: none)")
+                   help="exit with status 1 on any open finding, or only on known-exploited ones (default: none)")
+    p.add_argument("--vex", metavar="FILE", action="append",
+                   help=f"OpenVEX or CycloneDX VEX file with your decisions (repeatable; default: ./{vex_mod.DEFAULT_FILE} "
+                        "if present)")
+    p.add_argument("--no-vex", action="store_true", help="ignore VEX files")
     p.set_defaults(func=cmd_scan)
+
+    p = sub.add_parser("vex", help="record whether a vulnerability affects your product (OpenVEX)")
+    vex_cmds = p.add_subparsers(title="action", metavar="ACTION")
+    v = vex_cmds.add_parser("add", parents=[common], help="add a decision to the VEX file")
+    v.add_argument("--id", required=True, metavar="VULN", help="vulnerability ID, e.g. CVE-2024-12345 or GHSA-xxxx-xxxx-xxxx")
+    v.add_argument("--component", metavar="PURL",
+                   help="the affected dependency as a package URL, e.g. pkg:npm/express@4.18.2 (omit the version "
+                        "to cover every version)")
+    v.add_argument("--status", required=True, choices=vex_mod.STATUSES)
+    v.add_argument("--justification", choices=vex_mod.JUSTIFICATIONS, help="why it is not_affected")
+    v.add_argument("--impact", default="", help="free-text reason it is not_affected")
+    v.add_argument("--action", default="", help="for affected: what users should do")
+    v.add_argument("-f", "--file", default=vex_mod.DEFAULT_FILE, help=f"OpenVEX file (default: {vex_mod.DEFAULT_FILE})")
+    v.add_argument("--author", help="who made the decision (default: manufacturer from cra-kit.toml)")
+    v.set_defaults(func=cmd_vex_add)
+    v = vex_cmds.add_parser("list", parents=[common], help="show the decisions in a VEX file")
+    v.add_argument("-f", "--file", default=vex_mod.DEFAULT_FILE, help=f"VEX file (default: {vex_mod.DEFAULT_FILE})")
+    v.set_defaults(func=cmd_vex_list)
+    p.set_defaults(func=lambda _a, _p=p: (_p.print_help(), EXIT_ERROR)[1])
 
     p = sub.add_parser("assess", parents=[common], help="CRA scope, classification and readiness report")
     p.add_argument("--answers", metavar="FILE", help=f"answers file (default: ./{ANSWERS_NAME})")
@@ -273,10 +297,15 @@ def cmd_scan(args: argparse.Namespace) -> int:
         purls = [c.purl for c in result.deduplicated()]
     if not purls:
         _warn("no components to scan")
+    statements = [] if args.no_vex else _load_vex(args.vex)
     try:
         result = scan_mod.scan(purls, check_kev=not args.no_kev)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise CliError(f"could not reach OSV.dev ({exc}); check your network or proxy settings") from exc
+    if statements:
+        product = _product(args)
+        own = {vex_mod.product_id(product.name, product.version)} if product else set()
+        vex_mod.apply(result, statements, own)
 
     if args.format == "json":
         text = json.dumps(result.to_dict(), indent=2) + "\n"
@@ -290,10 +319,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
     for e in result.errors:
         _warn(e)
 
-    if args.fail_on == "any" and result.findings:
+    if args.fail_on == "any" and result.open_findings:
         return EXIT_FINDINGS
     if args.fail_on == "kev":
-        if result.findings and not result.kev_checked:
+        if result.open_findings and not result.kev_checked:
             print("cra-kit: error: --fail-on kev, but the CISA KEV catalogue could not be checked", file=sys.stderr)
             return EXIT_ERROR
         if result.known_exploited:
@@ -301,11 +330,29 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _load_vex(paths: list[str] | None) -> list[vex_mod.Statement]:
+    files = [Path(p) for p in paths or []]
+    if not files and Path(vex_mod.DEFAULT_FILE).is_file():
+        files = [Path(vex_mod.DEFAULT_FILE)]
+        print(f"Using VEX decisions from {vex_mod.DEFAULT_FILE}", file=sys.stderr)
+    statements: list[vex_mod.Statement] = []
+    for f in files:
+        if not f.is_file():
+            raise CliError(f"VEX file not found: {f}")
+        try:
+            statements += vex_mod.load(f)
+        except json.JSONDecodeError as exc:
+            raise CliError(f"{f} is not valid JSON ({exc})") from exc
+    return statements
+
+
 def _scan_headline(r: scan_mod.ScanResult) -> str:
     text = (f"Scanned {r.scanned} components: {r.vulnerable_components} with known vulnerabilities "
-            f"({len(r.findings)} advisories)")
+            f"({len(r.open_findings)} open advisories)")
     if r.kev_checked:
         text += f", {len(r.known_exploited)} known exploited (CISA KEV)"
+    if r.closed_findings:
+        text += f"; {len(r.closed_findings)} closed by VEX"
     return text + "."
 
 
@@ -314,17 +361,66 @@ def _scan_table(r: scan_mod.ScanResult) -> str:
     if r.known_exploited:
         lines.append("Known-exploited advisories are listed first. If one is exploitable in your product, "
                      "CRA Article 14 requires an early warning within 24 hours of becoming aware.")
-    if r.findings:
-        rows = [("KEV", "SEVERITY", "COMPONENT", "ADVISORY", "FIXED IN")]
-        for f in r.findings:
-            advisory = f.id + (f" ({', '.join(c for c in f.cves if c != f.id)})" if [c for c in f.cves if c != f.id] else "")
-            kev = "YES" if f.known_exploited else ("no" if r.kev_checked else "?")
-            rows.append((kev, f.severity, f.purl, advisory, ", ".join(f.fixed_versions) or "-"))
-        widths = [max(len(row[i]) for row in rows) for i in range(4)]
+    if r.open_findings:
         lines.append("")
-        for row in rows:
-            lines.append("  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row[:4])) + "  " + row[4])
+        lines += _rows([("KEV", "SEVERITY", "COMPONENT", "ADVISORY", "FIXED IN")] + [
+            ("YES" if f.known_exploited else ("no" if r.kev_checked else "?"), f.severity, f.purl,
+             _advisory_text(f), ", ".join(f.fixed_versions) or "-")
+            for f in r.open_findings
+        ])
+    if r.closed_findings:
+        lines += ["", "Closed by VEX:"]
+        lines += _rows([("STATUS", "COMPONENT", "ADVISORY", "REASON")] + [
+            (f.vex["status"], f.purl, _advisory_text(f),
+             f.vex.get("justification") or f.vex.get("impact_statement") or "-")
+            for f in r.closed_findings
+        ])
     return "\n".join(lines) + "\n"
+
+
+def _advisory_text(f: scan_mod.Finding) -> str:
+    others = [c for c in f.cves if c != f.id]
+    return f.id + (f" ({', '.join(others)})" if others else "")
+
+
+def _rows(rows: list[tuple[str, ...]]) -> list[str]:
+    """Left-aligned columns; the last column is not padded."""
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]) - 1)]
+    return ["  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row[:-1])) + "  " + row[-1] for row in rows]
+
+
+def cmd_vex_add(args: argparse.Namespace) -> int:
+    product = _product(args)
+    own = vex_mod.product_id(product.name, product.version) if product else None
+    statement = vex_mod.make_statement(
+        args.id.strip(), args.status, args.component, own,
+        justification=args.justification or "", impact_statement=args.impact, action_statement=args.action,
+    )
+    author = args.author or (product.manufacturer if product and product.manufacturer else "")
+    doc = vex_mod.add(Path(args.file), statement, author)
+    target = args.component or own
+    print(f"Recorded {args.id} as {args.status} for {target} in {args.file} "
+          f"({len(doc['statements'])} statement(s), version {doc['version']})")
+    if not product:
+        _warn(f"no {config.CONFIG_NAME} found, so the statement names only the component, not your product")
+    return EXIT_OK
+
+
+def cmd_vex_list(args: argparse.Namespace) -> int:
+    path = Path(args.file)
+    if not path.is_file():
+        raise CliError(f"VEX file not found: {path}. Record a decision with `cra-kit vex add`")
+    statements = vex_mod.load(path)
+    if not statements:
+        print(f"{path}: no statements")
+        return EXIT_OK
+    rows = [("DECIDED", "VULNERABILITY", "STATUS", "COMPONENT", "REASON")]
+    for st in sorted(statements, key=lambda s: (s.timestamp, s.order)):
+        rows.append((st.timestamp[:10] or "-", st.vulnerability, st.status,
+                     ", ".join(st.subcomponents or st.products) or "(whole product)",
+                     st.justification or st.impact_statement or st.action_statement or "-"))
+    print("\n".join(_rows(rows)))
+    return EXIT_OK
 
 
 def cmd_assess(args: argparse.Namespace) -> int:

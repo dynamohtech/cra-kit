@@ -64,7 +64,7 @@ def test_scan_table_and_fail_on(project, offline_scan, capsys):
     main(["sbom"])
     assert main(["scan", "sbom.cdx.json"]) == 0
     out = capsys.readouterr().out
-    assert "Scanned 5 components: 3 with known vulnerabilities (3 advisories), 1 known exploited" in out
+    assert "Scanned 5 components: 3 with known vulnerabilities (3 open advisories), 1 known exploited" in out
     assert out.index("GHSA-test-kev1-0001") < out.index("GHSA-test-scop-0003")
     assert main(["scan", "sbom.cdx.json", "--fail-on", "kev"]) == 1
     assert main(["scan", ".", "--fail-on", "any"]) == 1  # scanning the folder directly works too

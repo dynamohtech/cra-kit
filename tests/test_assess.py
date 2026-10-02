@@ -151,3 +151,12 @@ def test_markdown_report():
     gaps = md.split("## Gaps to close first")[1].split("## Support period")[0]
     assert gaps.index("I.2a") < gaps.index("I.1")  # at-risk before not started
     assert "not legal advice" in md
+
+
+def test_vex_closed_findings_are_evidence():
+    scan = {"vulnerable_components": 0, "known_exploited_count": 0, "closed_by_vex_count": 2,
+            "vex_sources": ["cra-kit.vex.json"]}
+    result = assess(answers(), scan_summary=scan, today=TODAY)
+    i2a = next(r for r in result.part_i if r.id == "I.2a")
+    assert "2 dependency advisories closed by recorded VEX decisions (cra-kit.vex.json)" in i2a.evidence
+    assert i2a.status == "partial"
