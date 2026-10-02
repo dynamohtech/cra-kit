@@ -1,0 +1,83 @@
+name: "cra-kit: Cyber Resilience Act check"
+description: "EU Cyber Resilience Act checks in CI: CycloneDX SBOM, OSV.dev scan, CISA KEV flags and VEX decisions."
+author: "Emmanuel Adegbaju (dynamohtech)"
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: "Project folder, lockfile or CycloneDX SBOM to check, relative to working-directory."
+    default: "."
+  fail-on:
+    description: "Fail the step on open findings: none, any, or kev (only known-exploited vulnerabilities)."
+    default: "kev"
+  include-dev:
+    description: "Include development-only dependencies (true or false)."
+    default: "false"
+  vex:
+    description: "OpenVEX or CycloneDX VEX file with your decisions. Default: cra-kit.vex.json if present."
+    default: ""
+  config:
+    description: "Path to cra-kit.toml. Default: cra-kit.toml in working-directory if present."
+    default: ""
+  sbom-file:
+    description: "Where to write the CycloneDX SBOM."
+    default: "sbom.cdx.json"
+  scan-file:
+    description: "Where to write the scan result (JSON)."
+    default: "cra-scan.json"
+  working-directory:
+    description: "Folder to run in."
+    default: "."
+  python-version:
+    description: "Python version to set up (3.11 or newer). Set to an empty string to use the Python already on the runner."
+    default: "3.12"
+
+outputs:
+  sbom-file:
+    description: "Path of the SBOM."
+    value: ${{ steps.check.outputs.sbom-file }}
+  scan-file:
+    description: "Path of the scan result (JSON)."
+    value: ${{ steps.check.outputs.scan-file }}
+  components:
+    description: "Number of components in the SBOM."
+    value: ${{ steps.check.outputs.components }}
+  vulnerable-components:
+    description: "Components with open (not VEX-closed) advisories."
+    value: ${{ steps.check.outputs.vulnerable-components }}
+  open-advisories:
+    description: "Open advisories."
+    value: ${{ steps.check.outputs.open-advisories }}
+  known-exploited:
+    description: "Open advisories listed in the CISA Known Exploited Vulnerabilities catalogue."
+    value: ${{ steps.check.outputs.known-exploited }}
+  closed-by-vex:
+    description: "Advisories closed by VEX decisions."
+    value: ${{ steps.check.outputs.closed-by-vex }}
+
+runs:
+  using: composite
+  steps:
+    - if: ${{ inputs.python-version != '' }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install cra-kit
+      shell: bash
+      run: python -m pip install --disable-pip-version-check --quiet "$GITHUB_ACTION_PATH"
+    - name: SBOM and vulnerability check
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs are passed as environment variables, never interpolated into the script.
+      env:
+        CRA_PATH: ${{ inputs.path }}
+        CRA_FAIL_ON: ${{ inputs.fail-on }}
+        CRA_INCLUDE_DEV: ${{ inputs.include-dev }}
+        CRA_VEX: ${{ inputs.vex }}
+        CRA_CONFIG: ${{ inputs.config }}
+        CRA_SBOM_FILE: ${{ inputs.sbom-file }}
+        CRA_SCAN_FILE: ${{ inputs.scan-file }}
+      run: python -m cra_kit.action

@@ -1,0 +1,76 @@
+name: Action
+
+# Runs this repository's own GitHub Action (action.yml) against real OSV.dev
+# and CISA KEV data on the test fixtures.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run the action (report only)
+        id: report
+        uses: ./
+        with:
+          path: tests/fixtures/npm-v3
+          fail-on: none
+          sbom-file: npm-v3.cdx.json
+
+      - name: Check outputs
+        shell: bash
+        env:
+          COMPONENTS: ${{ steps.report.outputs.components }}
+          VULNERABLE: ${{ steps.report.outputs.vulnerable-components }}
+          SBOM: ${{ steps.report.outputs.sbom-file }}
+          SCAN: ${{ steps.report.outputs.scan-file }}
+        run: |
+          echo "components=$COMPONENTS vulnerable=$VULNERABLE sbom=$SBOM scan=$SCAN"
+          test "$COMPONENTS" = "4"
+          test "$VULNERABLE" -ge 1   # express 4.18.2 has published advisories
+          test -s "$SBOM"
+          test -s "$SCAN"
+
+      - name: Run the action on a yarn 4 project
+        id: yarn
+        uses: ./
+        with:
+          path: tests/fixtures/yarn-berry
+          fail-on: none
+          sbom-file: yarn-berry.cdx.json
+          scan-file: yarn-berry-scan.json
+
+      - name: Check yarn outputs
+        shell: bash
+        env:
+          COMPONENTS: ${{ steps.yarn.outputs.components }}
+        run: test "$COMPONENTS" = "92"
+
+      - name: Run the action with fail-on any (must fail)
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/npm-v3
+          fail-on: any
+          sbom-file: strict.cdx.json
+          scan-file: strict-scan.json
+          python-version: ""
+
+      - name: Check that fail-on any failed the step
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.strict.outcome }}
+        run: test "$OUTCOME" = "failure"

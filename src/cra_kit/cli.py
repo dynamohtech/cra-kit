@@ -284,29 +284,52 @@ def cmd_sbom(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def cmd_scan(args: argparse.Namespace) -> int:
-    target = Path(args.target)
+def run_scan(
+    target: Path,
+    include_dev: bool = False,
+    check_kev: bool = True,
+    vex_paths: list[str] | None = None,
+    use_vex: bool = True,
+    product: Product | None = None,
+) -> scan_mod.ScanResult:
+    """Scan a CycloneDX SBOM, lockfile or project folder and apply VEX decisions."""
     if not target.exists():
-        raise CliError(f"path not found: {args.target}")
+        raise CliError(f"path not found: {target}")
     if _is_cyclonedx(target):
         purls = read_purls(target)
     else:
-        result = collect(target, include_dev=args.include_dev)
-        for w in result.warnings:
+        found = collect(target, include_dev=include_dev)
+        for w in found.warnings:
             _warn(w)
-        purls = [c.purl for c in result.deduplicated()]
+        purls = [c.purl for c in found.deduplicated()]
     if not purls:
         _warn("no components to scan")
-    statements = [] if args.no_vex else _load_vex(args.vex)
+    statements = _load_vex(vex_paths) if use_vex else []
     try:
-        result = scan_mod.scan(purls, check_kev=not args.no_kev)
+        result = scan_mod.scan(purls, check_kev=check_kev)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise CliError(f"could not reach OSV.dev ({exc}); check your network or proxy settings") from exc
     if statements:
-        product = _product(args)
         own = {vex_mod.product_id(product.name, product.version)} if product else set()
         vex_mod.apply(result, statements, own)
+    return result
 
+
+def fail_code(result: scan_mod.ScanResult, fail_on: str) -> int:
+    """Exit status for --fail-on: 1 when open findings match, 2 when KEV status is unknown."""
+    if fail_on == "any" and result.open_findings:
+        return EXIT_FINDINGS
+    if fail_on == "kev":
+        if result.open_findings and not result.kev_checked:
+            print("cra-kit: error: --fail-on kev, but the CISA KEV catalogue could not be checked", file=sys.stderr)
+            return EXIT_ERROR
+        if result.known_exploited:
+            return EXIT_FINDINGS
+    return EXIT_OK
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    result = run_scan(Path(args.target), args.include_dev, not args.no_kev, args.vex, not args.no_vex, _product(args))
     if args.format == "json":
         text = json.dumps(result.to_dict(), indent=2) + "\n"
     elif args.format == "markdown":
@@ -318,16 +341,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         print(_scan_headline(result), file=sys.stderr)
     for e in result.errors:
         _warn(e)
-
-    if args.fail_on == "any" and result.open_findings:
-        return EXIT_FINDINGS
-    if args.fail_on == "kev":
-        if result.open_findings and not result.kev_checked:
-            print("cra-kit: error: --fail-on kev, but the CISA KEV catalogue could not be checked", file=sys.stderr)
-            return EXIT_ERROR
-        if result.known_exploited:
-            return EXIT_FINDINGS
-    return EXIT_OK
+    return fail_code(result, args.fail_on)
 
 
 def _load_vex(paths: list[str] | None) -> list[vex_mod.Statement]:
