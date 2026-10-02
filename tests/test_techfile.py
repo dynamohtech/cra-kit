@@ -104,7 +104,7 @@ def test_evidence_from_sbom_scan_and_vex():
     vii = docs["01-technical-documentation.md"]
     assert "`sbom.cdx.json` (CycloneDX 1.6, 40 components" in vii
     assert "40 in total, 8 direct and 32 transitive" in vii
-    assert "1 components with open advisories, 0 known exploited, 2 closed by VEX" in vii
+    assert "1 component with open advisories, 0 known exploited, 2 closed by VEX" in vii
     assert "`cra-kit.vex.json`" in vii and "`SECURITY.md`" in vii
     assert "Dependency vulnerability scan (`scan.json`)" in vii
 

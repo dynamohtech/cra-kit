@@ -191,7 +191,8 @@ def annex_vii(inp: Inputs) -> str:
     ]
     if inp.scan_summary:
         lines.append(f"| Dependency vulnerability scan (`{inp.scan_file}`) | "
-                     f"{(inp.today or date.today()).isoformat()} | Annex I, Part I(2)(a) and Part II(1)–(2) |")
+                     f"{(inp.today or date.today()).isoformat()} | Annex I, Part I(2)(a) and Part II(1), for "
+                     "third-party components only |")
     lines += [
         f"| {TODO} security testing (e.g. penetration test, fuzzing, code review) | | Annex I, Part I and Part II(3) |",
         "",
@@ -210,7 +211,8 @@ def annex_vii(inp: Inputs) -> str:
 def _scan_sentence(summary: dict | None) -> str:
     if not summary:
         return ""
-    text = (f"{summary.get('vulnerable_components', 0)} components with open advisories, "
+    n = summary.get("vulnerable_components", 0)
+    text = (f"{n} component{'' if n == 1 else 's'} with open advisories, "
             f"{summary.get('known_exploited_count', 0)} known exploited")
     if summary.get("closed_by_vex_count"):
         text += f", {summary['closed_by_vex_count']} closed by VEX"
@@ -283,7 +285,8 @@ def annex_v(inp: Inputs) -> str:
     elif a and a.category == "class_i":
         lines.append("Not applicable if you used internal control (module A), which a Class I product may use only "
                      "when harmonised standards, common specifications or a European cybersecurity certification "
-                     f"scheme are applied in full (Article 32(2)). Otherwise: {TODO} name and number of the notified "
+                     "scheme (at assurance level at least 'substantial') are applied in full (Article 32(2)). "
+                     f"Otherwise: {TODO} name and number of the notified "
                      "body, the procedure performed and the certificate reference.")
     else:
         lines.append(f"{TODO} name and number of the notified body, the procedure performed and the certificate "
