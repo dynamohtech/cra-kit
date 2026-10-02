@@ -108,3 +108,19 @@ def test_scan_rejects_misaligned_osv_response():
 )
 def test_osv_query(purl, query):
     assert osv_query(purl) == query
+
+
+def test_markdown_cells_neutralise_third_party_text():
+    from cra_kit.scan import cell, code
+
+    assert cell("a | b\n<script>alert(1)</script> & c") == "a \\| b &lt;script&gt;alert(1)&lt;/script&gt; &amp; c"
+    assert cell("[x](https://e.example) \\") == "\\[x\\](https://e.example) \\\\"
+    assert code("pkg:npm/a`b@1\n") == "`pkg:npm/a'b@1`"
+
+
+def test_markdown_advisory_link_only_for_plain_ids(transport):
+    result = scan(PURLS, transport=transport)
+    result.findings[0].id = "evil](https://x.example)"
+    md = to_markdown(result)
+    row = next(line for line in md.splitlines() if "evil" in line)
+    assert "evil\\](https://x.example)" in row and "[evil" not in row

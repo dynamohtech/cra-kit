@@ -101,3 +101,51 @@ def test_action_yml_parses_and_has_marketplace_fields():
     assert data["branding"] == {"icon": "shield", "color": "blue"}
     assert len(data["description"]) <= 125
     assert all("description" in v for v in data["inputs"].values())
+
+
+def _outside_stop_commands(printed: str) -> list[str]:
+    """Lines GitHub would treat as workflow commands (those outside ::stop-commands:: blocks)."""
+    token, out = None, []
+    for line in printed.splitlines():
+        if token is None and line.startswith("::stop-commands::"):
+            token = line.split("::stop-commands::", 1)[1]
+            continue
+        if token is not None:
+            if line == f"::{token}::":
+                token = None
+            continue
+        out.append(line)
+    return [line for line in out if line.startswith("::")]
+
+
+def test_third_party_text_cannot_inject_workflow_commands(workspace, capsys):
+    tmp, env = workspace
+    vex.add(tmp / "cra-kit.vex.json", vex.make_statement(
+        "CVE-2099-0001", "not_affected", "pkg:npm/express@4.18.2", None,
+        impact_statement="harmless\n::error title=Injected::from a VEX file\n<img src=https://evil.example/x.png>"),
+        "a")
+    assert action.run(env | {"CRA_FAIL_ON": "none"}) == 0
+    printed = capsys.readouterr().out
+    commands = _outside_stop_commands(printed)
+    assert not any("Injected" in c for c in commands)
+    assert printed.splitlines()[0].startswith("::stop-commands::")
+    summary = (tmp / "summary.md").read_text()
+    assert "<img" not in summary and "&lt;img" in summary
+    assert "::error title=Injected" not in summary.split("\n## Closed by VEX")[1].split("\n")[0]
+    closed_rows = [line for line in summary.splitlines() if "GHSA-test-kev1-0001" in line and "not affected" in line]
+    assert len(closed_rows) == 1  # the statement stays on one table row
+
+
+@pytest.mark.parametrize("key", ["CRA_SCAN_FILE", "CRA_SBOM_FILE", "CRA_PATH", "CRA_VEX"])
+def test_inputs_with_line_breaks_are_rejected(workspace, key, capsys):
+    tmp, env = workspace
+    assert action.run(env | {key: "scan.json\nknown-exploited=0"}) == 2
+    assert not (tmp / "out.txt").exists()
+    assert "must not contain line breaks" in capsys.readouterr().out
+
+
+def test_own_annotations_are_printed_after_commands_resume(workspace, capsys):
+    _, env = workspace
+    action.run(env)
+    commands = _outside_stop_commands(capsys.readouterr().out)
+    assert any(c.startswith("::error title=Known exploited vulnerability") for c in commands)

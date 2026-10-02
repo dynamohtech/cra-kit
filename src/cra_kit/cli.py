@@ -408,7 +408,8 @@ def _advisory_text(f: scan_mod.Finding) -> str:
 
 
 def _rows(rows: list[tuple[str, ...]]) -> list[str]:
-    """Left-aligned columns; the last column is not padded."""
+    """Left-aligned columns; the last column is not padded. Each cell is kept to one line."""
+    rows = [tuple(" ".join(str(cell).split()) for cell in row) for row in rows]
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]) - 1)]
     return ["  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row[:-1])) + "  " + row[-1] for row in rows]
 

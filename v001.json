@@ -1,0 +1,1 @@
+{"@context": "https://openvex.dev/ns", "@id": "x", "author": "a", "timestamp": "2023-01-01T00:00:00Z", "version": "1", "statements": [{"vulnerability": "CVE-2023-1234", "products": ["pkg:npm/foo@1.0.0"], "subcomponents": ["pkg:npm/bar@2.0.0"], "status": "not_affected", "justification": "component_not_present"}]}

@@ -163,3 +163,53 @@ def test_cli_vex_flow(tmp_path, monkeypatch, offline_scan, capsys):
     assert "## Closed by VEX" in capsys.readouterr().out
     assert main(["vex", "add", "--id", "X", "--status", "not_affected"]) == 2
     assert main(["scan", "--vex", "missing.json"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("subject", "purl"),
+    [
+        ("pkg:pypi/torch@2.1.0+cpu", "pkg:pypi/torch@2.1.0%2Bcpu"),  # "+" written literally or encoded
+        ("pkg:golang/golang.org/x/net@0.17.0", "pkg:golang/golang.org/x/net@v0.17.0"),  # Go "v" prefix
+        ("pkg:golang/github.com/docker/docker@v20.10.24+incompatible",
+         "pkg:golang/github.com/docker/docker@v20.10.24%2Bincompatible"),
+        ("PKG:npm/foo@1.0.0", "pkg:npm/foo@1.0.0"),
+        ("pkg:npm/foo@1.0.0", "pkg:npm/foo@1.0.0?arch=x64"),
+    ],
+)
+def test_purl_matches_equivalent_spellings(subject, purl):
+    assert vex.purl_matches(subject, purl)
+
+
+def test_latest_statement_by_time_not_text():
+    older = vex.Statement("CVE-1", "not_affected", subcomponents=["pkg:npm/foo"],
+                          timestamp="2024-05-01T09:00:00+02:00")  # 07:00 UTC
+    newer = vex.Statement("CVE-1", "affected", subcomponents=["pkg:npm/foo"], timestamp="2024-05-01T08:00:00Z")
+    assert vex.find([older, newer], {"CVE-1"}, "pkg:npm/foo@1.0.0").status == "affected"
+    frac = vex.Statement("CVE-1", "affected", subcomponents=["pkg:npm/foo"], timestamp="2024-05-01T08:00:00.5Z")
+    whole = vex.Statement("CVE-1", "not_affected", subcomponents=["pkg:npm/foo"], timestamp="2024-05-01T08:00:00Z")
+    assert vex.find([frac, whole], {"CVE-1"}, "pkg:npm/foo@1.0.0").status == "affected"
+
+
+def test_cyclonedx_versions_are_respected(tmp_path):
+    bom = {"bomFormat": "CycloneDX", "specVersion": "1.5", "vulnerabilities": [{
+        "id": "CVE-X", "analysis": {"state": "not_affected"},
+        "affects": [{"ref": "pkg:npm/lodash", "versions": [
+            {"version": "4.17.21", "status": "unaffected"},
+            {"version": "4.17.20", "status": "affected"},
+            {"range": "vers:npm/<4.0.0", "status": "unaffected"}]}]}]}
+    path = tmp_path / "bom.json"
+    path.write_text(json.dumps(bom))
+    statements = vex.load(path)
+    assert vex.find(statements, {"CVE-X"}, "pkg:npm/lodash@4.17.21")
+    assert not vex.find(statements, {"CVE-X"}, "pkg:npm/lodash@4.17.20")
+    assert not vex.find(statements, {"CVE-X"}, "pkg:npm/lodash@3.0.0")  # ranges are not evaluated
+
+
+def test_openvex_v001_documents(tmp_path):
+    doc = {"@context": "https://openvex.dev/ns", "@id": "x", "author": "a", "timestamp": "2023-01-01T00:00:00Z",
+           "version": "1", "statements": [{"vulnerability": "CVE-2023-1234", "products": ["pkg:npm/foo@1.0.0"],
+                                           "subcomponents": ["pkg:npm/bar@2.0.0"], "status": "not_affected",
+                                           "justification": "component_not_present"}]}
+    path = tmp_path / "v.json"
+    path.write_text(json.dumps(doc))
+    assert vex.find(vex.load(path), {"CVE-2023-1234"}, "pkg:npm/bar@2.0.0").status == "not_affected"

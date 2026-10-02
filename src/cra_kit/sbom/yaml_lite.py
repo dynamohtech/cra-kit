@@ -12,7 +12,20 @@ guessing), an empty value as ``None``, and anything outside the subset raises
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
+
+_BLOCK_INDICATOR = re.compile(r"^[|>][+-]?[1-9]?[+-]?(\s+#.*)?$")
+_ESCAPES = {
+    "0": "\0", "a": "\a", "b": "\b", "t": "\t", "\t": "\t", "n": "\n", "v": "\v", "f": "\f", "r": "\r",
+    "e": "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", "N": "\x85", "_": "\xa0", "L": "\u2028",
+    "P": "\u2029",
+}
+_HEX_ESCAPES = {"x": 2, "u": 4, "U": 8}
+
+
+class _Unterminated(ValueError):
+    """A quoted scalar continues on the next line."""
 
 
 @dataclass
@@ -30,8 +43,12 @@ def load(text: str) -> object:
 
 def load_all(text: str) -> list[object]:
     docs: list[list[_Line]] = [[]]
-    for number, raw in enumerate(text.splitlines(), 1):
-        line = raw.rstrip("\r").rstrip()
+    raw_lines = text.lstrip("\ufeff").splitlines()
+    i = 0
+    while i < len(raw_lines):
+        number = i + 1
+        line = raw_lines[i].rstrip("\r").rstrip()
+        i += 1
         if line in ("---", "..."):
             docs.append([])
             continue
@@ -40,7 +57,21 @@ def load_all(text: str) -> list[object]:
             continue
         if stripped.startswith("\t"):
             raise ValueError(f"line {number}: tabs are not allowed for indentation")
-        docs[-1].append(_Line(len(line) - len(stripped), stripped, number))
+        indent = len(line) - len(stripped)
+        block = _block_header(stripped)
+        if block is not None:
+            # Read a block scalar here, before comment stripping, so lines starting
+            # with '#' inside it are kept as text. It becomes a quoted scalar.
+            key, header = block
+            body: list[str] = []
+            while i < len(raw_lines):
+                raw = raw_lines[i].rstrip("\r")
+                if raw.strip() and len(raw) - len(raw.lstrip(" ")) <= indent:
+                    break
+                body.append(raw)
+                i += 1
+            stripped = f"{key}: {json.dumps(_block_value(body, header))}"
+        docs[-1].append(_Line(indent, stripped, number))
     out = []
     for lines in docs:
         if not lines:
@@ -74,6 +105,8 @@ class _Parser:
                 raise ValueError(f"line {line.number}: sequence item inside a mapping")
             key, rest = _split_key(line.text, line.number)
             self.i += 1
+            if rest.startswith("#"):
+                rest = ""  # "key:  # comment" has an empty value
             if rest == "":
                 nxt = lines[self.i] if self.i < len(lines) else None
                 if nxt is not None and nxt.indent > indent:
@@ -82,8 +115,8 @@ class _Parser:
                     value = self.sequence(indent)  # YAML allows "key:\n- item" at the same indent
                 else:
                     value = None
-            elif rest[0] in "|>":
-                value = self.block_scalar(indent, rest)
+            elif rest[0] in "\"'":
+                value = self.quoted_continuation(rest, indent, line.number)
             else:
                 value = _scalar_or_flow(rest, line.number)
             result[key] = value
@@ -112,13 +145,52 @@ class _Parser:
                 self.i += 1
         return items
 
-    def block_scalar(self, indent: int, header: str) -> str:
-        parts: list[str] = []
-        while self.i < len(self.lines) and self.lines[self.i].indent > indent:
-            parts.append(self.lines[self.i].text)
-            self.i += 1
-        joiner = "\n" if header.startswith("|") else " "
-        return joiner.join(parts)
+    def quoted_continuation(self, text: str, indent: int, number: int) -> object:
+        """A quoted scalar may continue over more-indented lines; line breaks fold to spaces."""
+        while True:
+            try:
+                return _scalar_or_flow(text, number)
+            except _Unterminated:
+                if self.i >= len(self.lines) or self.lines[self.i].indent <= indent:
+                    raise
+                text += " " + self.lines[self.i].text
+                self.i += 1
+
+
+def _block_header(text: str) -> tuple[str, str] | None:
+    """('key', '|') when the line opens a block scalar, else None."""
+    if text.startswith("- "):
+        return None
+    try:
+        key, rest = _split_key(text, 0)
+    except ValueError:
+        return None
+    if not rest or not _BLOCK_INDICATOR.match(rest):
+        return None
+    quoted_key = json.dumps(key)
+    return quoted_key, rest.split()[0]
+
+
+def _block_value(body: list[str], header: str) -> str:
+    lines = [ln.rstrip() for ln in body]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    content = [ln for ln in lines if ln.strip()]
+    common = min((len(ln) - len(ln.lstrip(" ")) for ln in content), default=0)
+    lines = [ln[common:] if ln.strip() else "" for ln in lines]
+    if header.startswith("|"):
+        value = "\n".join(lines)
+    else:  # folded: single line breaks become spaces, blank lines become line breaks
+        value, pending = "", ""
+        for ln in lines:
+            if not ln:
+                pending += "\n"
+            else:
+                value += (pending or (" " if value else "")) + ln
+                pending = ""
+    if "-" in header:
+        return value
+    return value + "\n" if value else value
 
 
 def _looks_like_key(text: str) -> bool:
@@ -164,18 +236,32 @@ def _quoted(text: str, start: int, number: int) -> tuple[str, int]:
             out.append(text[i])
             i += 1
     else:
+        out = []
         while i < len(text):
-            if text[i] == "\\":
+            ch = text[i]
+            if ch == '"':
+                value = "".join(out)
+                # json.dumps output may carry surrogate pairs as two \u escapes
+                return value.encode("utf-16", "surrogatepass").decode("utf-16"), i + 1
+            if ch == "\\":
+                if i + 1 >= len(text):
+                    break
+                esc = text[i + 1]
+                if esc in _HEX_ESCAPES:
+                    digits = text[i + 2:i + 2 + _HEX_ESCAPES[esc]]
+                    if len(digits) != _HEX_ESCAPES[esc] or not all(c in "0123456789abcdefABCDEF" for c in digits):
+                        raise ValueError(f"line {number}: bad \\{esc} escape")
+                    out.append(chr(int(digits, 16)))
+                    i += 2 + len(digits)
+                    continue
+                if esc not in _ESCAPES:
+                    raise ValueError(f"line {number}: unsupported escape \\{esc}")
+                out.append(_ESCAPES[esc])
                 i += 2
                 continue
-            if text[i] == '"':
-                raw = text[start:i + 1]
-                try:
-                    return json.loads(raw), i + 1
-                except ValueError as exc:
-                    raise ValueError(f"line {number}: unsupported escape in {raw}") from exc
+            out.append(ch)
             i += 1
-    raise ValueError(f"line {number}: unterminated quoted string")
+    raise _Unterminated(f"line {number}: unterminated quoted string")
 
 
 def _scalar_or_flow(text: str, number: int) -> object:
@@ -194,6 +280,8 @@ def _scalar_or_flow(text: str, number: int) -> object:
     hash_at = text.find(" #")
     if hash_at != -1:
         text = text[:hash_at].rstrip()
+    if text[:1] in ("&", "*", "!"):
+        raise ValueError(f"line {number}: anchors, aliases and tags are not supported")
     return None if text in ("", "~", "null") else text
 
 

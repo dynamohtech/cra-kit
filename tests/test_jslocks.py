@@ -197,7 +197,7 @@ seq_same_indent:
         "flow": {"integrity": "sha512-abc==", "engines": {"node": ">=6"}},
         "list": ["x64", "arm64"],
         "key: with colon": "1",
-        "nested": {"a": ["one", {"two": "2", "three": "3"}], "b": "line1\nline2"},
+        "nested": {"a": ["one", {"two": "2", "three": "3"}], "b": "line1\nline2\n"},
         "seq_same_indent": ["p", "q"],
     }
 
@@ -240,3 +240,36 @@ def test_fixture_folders_exist():
     for folder in ["pnpm-v9", "pnpm-v6", "pnpm-v5", "yarn-classic", "yarn-berry", "npm-alias"]:
         assert (FIXTURES / folder / "package.json").is_file()
         assert any(p.name in ("pnpm-lock.yaml", "yarn.lock", "package-lock.json") for p in Path(FIXTURES / folder).iterdir())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a: # note\n  b: 1\n",
+        'a: "x\\x41y\\u00e9\\t"\n',
+        "a: 'foo\n  bar'\nb: 1\n",
+        'a: "foo\n  bar"\nb: 1\n',
+        "a: |\n  #not a comment\n  text\nb: 1\n",
+        "a: |-\n  one\n  two\n",
+        "a: >\n  folded\n  text\n\n  para\nb: 1\n",
+        "\ufeffa: 1\n",
+        "a:\r\n  b: 1\r\n",
+        "a: {k: 'x: y', n: \"1,2\"}\n",
+    ],
+)
+def test_yaml_lite_matches_pyyaml_on_edge_cases(text):
+    yaml = pytest.importorskip("yaml")
+    expected = yaml.safe_load(text.lstrip("\ufeff"))
+
+    def norm(v):
+        if isinstance(v, dict):
+            return {str(k): norm(x) for k, x in v.items()}
+        return None if v is None else str(v)
+
+    assert yaml_lite.load(text) == norm(expected)
+
+
+@pytest.mark.parametrize("bad", ["a: &x 1\nb: *x\n", "a: !!str 1\n"])
+def test_yaml_lite_rejects_anchors_and_tags(bad):
+    with pytest.raises(ValueError, match="anchors, aliases and tags"):
+        yaml_lite.load(bad)

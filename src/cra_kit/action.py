@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -36,12 +37,38 @@ def _append(path_var: str, text: str, env: dict) -> None:
             fh.write(text)
 
 
+INPUTS = ("CRA_PATH", "CRA_FAIL_ON", "CRA_INCLUDE_DEV", "CRA_VEX", "CRA_CONFIG", "CRA_SBOM_FILE", "CRA_SCAN_FILE")
+
+
 def run(env: dict | None = None) -> int:
+    """Run the action. While cra-kit prints third-party text (lockfile paths, advisory summaries,
+    VEX statements), GitHub workflow commands are switched off, so that text cannot inject
+    annotations or other commands. cra-kit's own annotations are printed afterwards."""
     env = dict(os.environ if env is None else env)
+    annotations: list[str] = []
+    token = secrets.token_hex(16)
+    print(f"::stop-commands::{token}", flush=True)
+    try:
+        code = _run(env, annotations)
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        print(f"::{token}::", flush=True)
+    for line in annotations:
+        print(line)
+    return code
+
+
+def _run(env: dict, annotations: list[str]) -> int:
+    for key in INPUTS:
+        if any(ch in (env.get(key) or "") for ch in "\r\n"):
+            annotations.append(f"::error title=cra-kit::input {key.removeprefix('CRA_').lower().replace('_', '-')} "
+                               "must not contain line breaks")
+            return cli.EXIT_ERROR
     target = Path(env.get("CRA_PATH") or ".")
     fail_on = (env.get("CRA_FAIL_ON") or "kev").strip().lower()
     if fail_on not in ("none", "any", "kev"):
-        print(f"::error::fail-on must be none, any or kev (got {_escape(fail_on)})")
+        annotations.append(f"::error title=cra-kit::fail-on must be none, any or kev (got {_escape(fail_on)})")
         return cli.EXIT_ERROR
     include_dev = (env.get("CRA_INCLUDE_DEV") or "").strip().lower() in TRUE
     sbom_file = env.get("CRA_SBOM_FILE") or "sbom.cdx.json"
@@ -60,26 +87,26 @@ def run(env: dict | None = None) -> int:
             sbom_args += ["--config", config_file] if config_file else []
             code = cli.main(sbom_args)
             if code:
-                print("::error title=cra-kit::SBOM generation failed; see the log above")
+                annotations.append("::error title=cra-kit::SBOM generation failed; see the log above")
                 return code
             sbom_path = Path(sbom_file)
         summary = summarize(json.loads(sbom_path.read_text(encoding="utf-8")))
         result = cli.run_scan(sbom_path, vex_paths=[vex_file] if vex_file else None, product=product)
     except (cli.CliError, ValueError, FileNotFoundError) as exc:
-        print(f"::error title=cra-kit::{_escape(str(exc))}")
+        annotations.append(f"::error title=cra-kit::{_escape(str(exc))}")
         return cli.EXIT_ERROR
 
     Path(scan_file).write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
     print(cli._scan_table(result))
     for err in result.errors:
-        print(f"::warning title=cra-kit::{_escape(err)}")
+        annotations.append(f"::warning title=cra-kit::{_escape(err)}")
     for f in result.known_exploited:
         title = _escape_property(f"Known exploited vulnerability in {f.purl}")
         message = (
             f"{f.id} ({', '.join(f.cves) or 'no CVE'}) is in the CISA KEV catalogue. CRA Article 14: if it is "
             "exploited in your product, an early warning is due within 24 hours of becoming aware."
         )
-        print(f"::error title={title}::{_escape(message)}")
+        annotations.append(f"::error title={title}::{_escape(message)}")
 
     outputs = {
         "sbom-file": str(sbom_path),

@@ -1,0 +1,1 @@
+{"bomFormat": "CycloneDX", "specVersion": "1.5", "vulnerabilities": [{"id": "CVE-X", "analysis": {"state": "not_affected"}, "affects": [{"ref": "pkg:npm/lodash", "versions": [{"version": "4.17.21", "status": "unaffected"}, {"version": "4.17.20", "status": "affected"}]}]}]}

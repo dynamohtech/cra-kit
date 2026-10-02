@@ -173,7 +173,10 @@ def osv_query(purl: str) -> dict:
 
 
 def _advisory_link(f: Finding) -> str:
-    return f"[{f.id}]({f.url})" + (f" ({', '.join(f.cves)})" if f.cves and f.cves != [f.id] else "")
+    text = cell(f.id) + (f" ({cell(', '.join(f.cves))})" if f.cves and f.cves != [f.id] else "")
+    if f.id and all(c.isalnum() or c in "-_.:" for c in f.id):
+        return f"[{cell(f.id)}](https://osv.dev/vulnerability/{f.id})" + text[len(cell(f.id)):]
+    return text
 
 
 def purl_key(purl: str) -> tuple[str, str]:
@@ -224,6 +227,22 @@ def _to_finding(purl: str, vuln: dict) -> Finding:
     )
 
 
+def cell(text: object) -> str:
+    """Make outside data safe inside a Markdown table cell (advisory text and VEX statements
+    come from third parties): one line, no table breaks, no raw HTML."""
+    out = " ".join(str(text).split())
+    out = out.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    out = out.replace("\\", "\\\\")  # backslashes first, so the escapes below stay intact
+    for ch in "|[]":
+        out = out.replace(ch, "\\" + ch)
+    return out
+
+
+def code(text: object) -> str:
+    """Inline code span for identifiers such as purls."""
+    return "`" + " ".join(str(text).split()).replace("`", "'") + "`"
+
+
 def to_markdown(result: ScanResult) -> str:
     lines = ["# Vulnerability scan", ""]
     open_findings = result.open_findings
@@ -234,7 +253,7 @@ def to_markdown(result: ScanResult) -> str:
     if result.closed_findings:
         lines.append(
             f"**{len(result.closed_findings)}** more advisories are closed by VEX statements "
-            f"({', '.join(result.vex_sources)}) and listed separately below."
+            f"({cell(', '.join(result.vex_sources))}) and listed separately below."
         )
     if result.kev_checked:
         n = len(result.known_exploited)
@@ -246,13 +265,14 @@ def to_markdown(result: ScanResult) -> str:
     lines += ["", "| Component | Advisory | Severity | Exploited (KEV) | Fixed in | Summary |",
               "| --- | --- | --- | --- | --- | --- |"]
     for f in open_findings:
-        kev = f"Yes, since {f.kev_date_added}" if f.known_exploited else ("No" if result.kev_checked else "Not checked")
-        summary = f.summary.replace("|", "/")
+        kev = f"Yes, since {cell(f.kev_date_added)}" if f.known_exploited else (
+            "No" if result.kev_checked else "Not checked")
+        summary = cell(f.summary)
         if f.vex:
-            summary += f" (VEX: {f.vex['status'].replace('_', ' ')})"
+            summary += f" (VEX: {cell(f.vex['status'].replace('_', ' '))})"
         lines.append(
-            f"| `{f.purl}` | {_advisory_link(f)} | {f.severity} | {kev} | {', '.join(f.fixed_versions) or 'none listed'} "
-            f"| {summary} |"
+            f"| {code(f.purl)} | {_advisory_link(f)} | {cell(f.severity)} | {kev} "
+            f"| {cell(', '.join(f.fixed_versions)) or 'none listed'} | {summary} |"
         )
     if not open_findings:
         lines.append("| — | No open vulnerabilities | | | | |")
@@ -263,11 +283,11 @@ def to_markdown(result: ScanResult) -> str:
         for f in result.closed_findings:
             why = f.vex.get("justification") or f.vex.get("impact_statement") or f.vex.get("action_statement") or ""
             lines.append(
-                f"| `{f.purl}` | {_advisory_link(f)} | {f.vex['status'].replace('_', ' ')} "
-                f"| {why.replace('|', '/')} | {f.vex.get('timestamp', '')[:10]} |"
+                f"| {code(f.purl)} | {_advisory_link(f)} | {cell(f.vex['status'].replace('_', ' '))} "
+                f"| {cell(why)} | {cell(f.vex.get('timestamp', '')[:10])} |"
             )
     if result.errors:
-        lines += ["", "## Warnings", ""] + [f"- {e}" for e in result.errors]
+        lines += ["", "## Warnings", ""] + [f"- {cell(e)}" for e in result.errors]
     lines += ["", "_Sources: OSV.dev and CISA KEV. A listed advisory affects the component version; "
               "whether it is exploitable in your product needs your own assessment._", ""]
     return "\n".join(lines)

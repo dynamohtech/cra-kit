@@ -17,7 +17,7 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from cra_kit import __version__
 from cra_kit.scan import purl_key
@@ -160,7 +160,18 @@ def _from_cyclonedx(data: dict, source: str) -> list[Statement]:
             ref = str(affect.get("ref") or "")
             if ref.startswith("urn:cdx:") and "#" in ref:
                 ref = ref.split("#", 1)[1]
-            subjects.append(refs.get(ref, ref))
+            subject = refs.get(ref, ref)
+            versions = affect.get("versions") or []
+            if not versions:
+                subjects.append(subject)
+                continue
+            # Only exact versions not marked "affected" are covered; ranges are not evaluated.
+            base = subject.split("?", 1)[0].split("#", 1)[0]
+            if base.startswith("pkg:") and _purl_version(base) is not None:
+                base = base.rsplit("@", 1)[0]
+            for entry in versions:
+                if entry.get("version") and entry.get("status") != "affected":
+                    subjects.append(f"{base}@{entry['version']}")
         out.append(Statement(
             vulnerability=str(vuln.get("id") or ""),
             status=status,
@@ -187,14 +198,33 @@ def _purl_version(purl: str) -> str | None:
     return version if at and "/" not in version else None
 
 
+def _normal_version(purl: str, version: str | None) -> str | None:
+    if version is None:
+        return None
+    version = unquote(version)  # "1.0.0+build" and "1.0.0%2Bbuild" are the same version
+    if purl[4:].lower().startswith("golang/"):
+        version = version.removeprefix("v")  # Go modules are written with and without the "v"
+    return version
+
+
 def purl_matches(statement_id: str, purl: str) -> bool:
     """True when a VEX subject names this component (a versionless purl matches every version)."""
-    if not statement_id.startswith("pkg:"):
+    if not statement_id[:4].lower() == "pkg:":
         return statement_id == purl
+    statement_id = "pkg:" + statement_id[4:]
     if purl_key(statement_id) != purl_key(purl):
         return False
-    wanted = _purl_version(statement_id)
-    return wanted is None or wanted == _purl_version(purl)
+    wanted = _normal_version(statement_id, _purl_version(statement_id))
+    return wanted is None or wanted == _normal_version(purl, _purl_version(purl))
+
+
+def _when(timestamp: str) -> datetime:
+    """Statement time for ordering; unparseable or missing times sort first."""
+    try:
+        value = datetime.fromisoformat(timestamp.strip())
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def find(statements: list[Statement], ids: set[str], purl: str, own_product_ids: set[str] = frozenset()) -> Statement | None:
@@ -210,7 +240,7 @@ def find(statements: list[Statement], ids: set[str], purl: str, own_product_ids:
             matches.append(st)  # a statement about the whole product covers every component
     if not matches:
         return None
-    return max(matches, key=lambda s: (s.timestamp, s.order))
+    return max(matches, key=lambda s: (_when(s.timestamp), s.order))
 
 
 def apply(result, statements: list[Statement], own_product_ids: set[str] = frozenset()) -> int:
