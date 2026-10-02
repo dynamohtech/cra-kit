@@ -12,7 +12,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from cra_kit import __version__, assess as assess_mod, config, reporting
+from cra_kit import __version__, assess as assess_mod, config, reporting, techfile
 from cra_kit import scan as scan_mod
 from cra_kit import vex as vex_mod
 from cra_kit.config import Product
@@ -130,6 +130,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=["markdown", "json"], default="markdown")
     p.add_argument("-o", "--output", help="write the report to a file instead of the terminal")
     p.set_defaults(func=cmd_assess)
+
+    p = sub.add_parser("techfile", parents=[common],
+                       help="draft the technical documentation, EU declaration of conformity and user information")
+    p.add_argument("-o", "--output", default="cra-technical-file", help="folder to write (default: cra-technical-file)")
+    p.add_argument("--answers", metavar="FILE", help=f"readiness answers (default: ./{ANSWERS_NAME} if present)")
+    p.add_argument("--sbom", metavar="FILE", help=f"SBOM (default: ./{DEFAULT_SBOM} if present)")
+    p.add_argument("--scan", metavar="FILE", help="JSON output of `cra-kit scan --format json`")
+    p.add_argument("--vex", metavar="FILE", help=f"VEX file (default: ./{vex_mod.DEFAULT_FILE} if present)")
+    p.add_argument("--force", action="store_true", help="overwrite files that already exist (your edits are lost)")
+    p.set_defaults(func=cmd_techfile)
 
     p = sub.add_parser("report", help="Article 14 reporting pack with deadlines")
     kinds = p.add_subparsers(title="kind", metavar="KIND")
@@ -479,6 +489,45 @@ def cmd_assess(args: argparse.Namespace) -> int:
     )
     for w in result.warnings:
         _warn(w)
+    return EXIT_OK
+
+
+def cmd_techfile(args: argparse.Namespace) -> int:
+    product = _product(args)
+    if product is None:
+        raise CliError(f"no {config.CONFIG_NAME} found; run `cra-kit init` and fill in the product details first")
+
+    def default(value: str | None, name: str) -> str | None:
+        if value:
+            return value
+        return name if Path(name).is_file() else None
+
+    sbom_file = default(args.sbom, DEFAULT_SBOM)
+    sbom_summary = summarize(_load_json(sbom_file, "SBOM")) if sbom_file else None
+    scan_summary = _load_json(args.scan, "scan result") if args.scan else None
+    if scan_summary is not None and "vulnerable_components" not in scan_summary:
+        raise CliError(f"{args.scan} is not the JSON output of `cra-kit scan --format json`")
+    answers_file = default(args.answers, ANSWERS_NAME)
+    assessment = None
+    if answers_file:
+        assessment = assess_mod.assess(assess_mod.Answers.load(Path(answers_file)), product, sbom_summary, scan_summary)
+    policy = next((n for n in ("SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md") if Path(n).is_file()), "")
+    inputs = techfile.Inputs(
+        product=product, assessment=assessment, sbom_file=sbom_file or "", sbom_summary=sbom_summary,
+        scan_file=args.scan or "", scan_summary=scan_summary, vex_file=default(args.vex, vex_mod.DEFAULT_FILE) or "",
+        security_policy=policy,
+    )
+    docs = techfile.build(inputs)
+    written, kept = techfile.write(Path(args.output), docs, force=args.force)
+    for path in written:
+        print(f"Wrote {path}")
+    for path in kept:
+        print(f"Kept existing {path} (use --force to overwrite)")
+    used = [f"SBOM {sbom_file}" if sbom_file else "", f"answers {answers_file}" if answers_file else "",
+            f"scan {args.scan}" if args.scan else "", f"VEX {inputs.vex_file}" if inputs.vex_file else ""]
+    print(f"Prefilled from {config.CONFIG_NAME}" + "".join(f", {u}" for u in used if u) + ".")
+    print(f"{techfile.count_todos({p.name: p.read_text(encoding='utf-8') for p in written + kept})} TODO items left "
+          "to complete. These are drafts for you to complete and own; not legal advice.")
     return EXIT_OK
 
 

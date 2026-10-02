@@ -28,6 +28,14 @@ support_period_end = ""
 # EU Member States where the product is made available (ISO 3166 codes),
 # needed in the 24-hour early warning (Article 14(2)(a) and 14(4)(a)).
 member_states = []
+# Used by `cra-kit techfile` (Annexes II, V and VII). Optional for other commands.
+manufacturer_address = ""
+website = ""
+# What the product is for, in one or two sentences (Annex II(4), Annex VII(1)(a)).
+intended_purpose = ""
+# Public URL of the full EU declaration of conformity, if you publish it
+# (Annex II(6); required in a simplified declaration, Article 13(20)).
+declaration_url = ""
 # EU Member State of your main establishment (ISO 3166 code): where your
 # cybersecurity decisions are predominantly taken. Its CSIRT designated as
 # coordinator receives your Article 14 reports (Article 14(7)). With no EU
@@ -47,6 +55,10 @@ class Product:
     support_period_end: str = ""
     member_states: list[str] = field(default_factory=list)
     main_establishment: str = ""
+    manufacturer_address: str = ""
+    website: str = ""
+    intended_purpose: str = ""
+    declaration_url: str = ""
 
 
 def load(path: Path | None = None) -> Product | None:
