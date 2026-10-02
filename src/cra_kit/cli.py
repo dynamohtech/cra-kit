@@ -16,6 +16,7 @@ from cra_kit import __version__, assess as assess_mod, config, reporting, techfi
 from cra_kit import scan as scan_mod
 from cra_kit import vex as vex_mod
 from cra_kit.config import Product
+from cra_kit.model import count
 from cra_kit.sbom import collect
 from cra_kit.sbom.cyclonedx import build_bom, read_purls, summarize, write_bom
 
@@ -283,7 +284,7 @@ def cmd_sbom(args: argparse.Namespace) -> int:
     write_bom(bom, Path(args.output))
     s = summarize(bom)
     print(
-        f"Wrote {args.output}: {s['components']} components "
+        f"Wrote {args.output}: {count(s['components'], 'component')} "
         f"({s['direct']} direct, {s['transitive']} transitive, {s['unknown']} not stated) "
         f"from {len(result.sources)} dependency file(s)"
     )
@@ -371,8 +372,8 @@ def _load_vex(paths: list[str] | None) -> list[vex_mod.Statement]:
 
 
 def _scan_headline(r: scan_mod.ScanResult) -> str:
-    text = (f"Scanned {r.scanned} components: {r.vulnerable_components} with known vulnerabilities "
-            f"({len(r.open_findings)} open advisories)")
+    text = (f"Scanned {count(r.scanned, 'component')}: {r.vulnerable_components} with known vulnerabilities "
+            f"({count(len(r.open_findings), 'open advisory', 'open advisories')})")
     if r.kev_checked:
         text += f", {len(r.known_exploited)} known exploited (CISA KEV)"
     if r.closed_findings:

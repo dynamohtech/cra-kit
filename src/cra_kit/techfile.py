@@ -19,6 +19,7 @@ from pathlib import Path
 from cra_kit import __version__, cra
 from cra_kit.assess import CATEGORY_LABEL, STATUS_LABEL, Assessment
 from cra_kit.config import Product
+from cra_kit.model import count
 
 TODO = "**TODO:**"
 HARDWARE_TYPES = {"device"}
@@ -212,7 +213,7 @@ def _scan_sentence(summary: dict | None) -> str:
     if not summary:
         return ""
     n = summary.get("vulnerable_components", 0)
-    text = (f"{n} component{'' if n == 1 else 's'} with open advisories, "
+    text = (f"{count(n, 'component')} with open advisories, "
             f"{summary.get('known_exploited_count', 0)} known exploited")
     if summary.get("closed_by_vex_count"):
         text += f", {summary['closed_by_vex_count']} closed by VEX"

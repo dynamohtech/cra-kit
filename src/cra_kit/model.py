@@ -89,3 +89,8 @@ class ParseResult:
 
 def _rank(direct: bool | None) -> int:
     return {True: 2, None: 1, False: 0}[direct]
+
+
+def count(n: int, singular: str, plural: str | None = None) -> str:
+    """'1 component', '3 components'."""
+    return f"{n} {singular if n == 1 else (plural or singular + 's')}"

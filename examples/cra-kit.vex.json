@@ -1,0 +1,48 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "urn:uuid:00000000-0000-4000-8000-000000000001",
+  "author": "Example Devices BV",
+  "role": "Manufacturer",
+  "timestamp": "2026-09-30T13:00:00Z",
+  "last_updated": "2026-09-30T14:00:00Z",
+  "version": 2,
+  "tooling": "cra-kit",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2099-0003"
+      },
+      "timestamp": "2026-09-30T13:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:generic/Example%20Smart%20Lock%20Hub@2.4.0",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/%40babel/core@7.23.0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "@babel/core is only used at build time; it is not shipped in the firmware image."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2099-0001"
+      },
+      "timestamp": "2026-09-30T14:00:00Z",
+      "products": [
+        {
+          "@id": "pkg:generic/Example%20Smart%20Lock%20Hub@2.4.0",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/express@4.18.2"
+            }
+          ]
+        }
+      ],
+      "status": "under_investigation"
+    }
+  ]
+}

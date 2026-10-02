@@ -10,6 +10,7 @@ from typing import Callable
 
 from cra_kit import __version__, cra
 from cra_kit.config import Product
+from cra_kit.model import count
 
 YES, NO, UNSURE = "yes", "no", "unsure"
 STATUSES = ("done", "partial", "no", "n/a")
@@ -236,7 +237,7 @@ def assess(
         r = by_id["II.1"]
         n, direct, unknown = sbom_summary["components"], sbom_summary["direct"], sbom_summary["unknown"]
         evidence = (
-            f"CycloneDX {sbom_summary.get('spec_version')} SBOM: {n} components "
+            f"CycloneDX {sbom_summary.get('spec_version')} SBOM: {count(n, 'component')} "
             f"({direct} direct, {sbom_summary['transitive']} transitive, {unknown} relationship unknown)"
         )
         if n == 0:
@@ -256,13 +257,13 @@ def assess(
         closed = scan_summary.get("closed_by_vex_count", 0)
         if closed:
             r.evidence = "; ".join(x for x in (r.evidence, (
-                f"{closed} dependency advisories closed by recorded VEX decisions "
+                f"{count(closed, 'dependency advisory', 'dependency advisories')} closed by recorded VEX decisions "
                 f"({', '.join(scan_summary.get('vex_sources') or []) or 'VEX file'})"
             )) if x)
         if vulnerable:
             r.status = "at-risk"
             r.evidence = "; ".join(x for x in (r.evidence, (
-                f"dependency scan found known vulnerabilities in {vulnerable} components"
+                f"dependency scan found known vulnerabilities in {count(vulnerable, 'component')}"
                 + (f", {kev} of them listed as exploited in the wild (CISA KEV)" if kev else "")
             )) if x)
             if kev:

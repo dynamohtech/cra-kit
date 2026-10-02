@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Callable
 
 from cra_kit import __version__
+from cra_kit.model import count
 
 OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
@@ -247,18 +248,21 @@ def to_markdown(result: ScanResult) -> str:
     lines = ["# Vulnerability scan", ""]
     open_findings = result.open_findings
     lines.append(
-        f"Scanned **{result.scanned}** components: **{result.vulnerable_components}** have known vulnerabilities "
-        f"({len(open_findings)} open advisories)."
+        f"Scanned **{count(result.scanned, 'component')}**: **{result.vulnerable_components}** "
+        f"{'has' if result.vulnerable_components == 1 else 'have'} known vulnerabilities "
+        f"({count(len(open_findings), 'open advisory', 'open advisories')})."
     )
     if result.closed_findings:
         lines.append(
-            f"**{len(result.closed_findings)}** more advisories are closed by VEX statements "
+            f"**{count(len(result.closed_findings), 'more advisory', 'more advisories')}** "
+            f"{'is' if len(result.closed_findings) == 1 else 'are'} closed by VEX statements "
             f"({cell(', '.join(result.vex_sources))}) and listed separately below."
         )
     if result.kev_checked:
         n = len(result.known_exploited)
         lines.append(
-            f"**{n}** advisories are in CISA's Known Exploited Vulnerabilities catalogue."
+            f"**{count(n, 'advisory', 'advisories')}** {'is' if n == 1 else 'are'} in CISA's Known Exploited "
+            "Vulnerabilities catalogue."
             + (" Assess these first: if the vulnerability is actively exploited in your product, "
                "CRA Article 14 requires an early warning within 24 hours of becoming aware of it." if n else "")
         )

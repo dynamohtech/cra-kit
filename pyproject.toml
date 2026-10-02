@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cra-kit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Open-source toolkit for EU Cyber Resilience Act compliance: SBOMs, vulnerability checks, readiness reports and incident reporting templates."
 readme = "README.md"
 requires-python = ">=3.11"

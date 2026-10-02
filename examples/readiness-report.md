@@ -1,6 +1,6 @@
 # CRA readiness report: Example Smart Lock Hub 2.4.0
 
-Generated 2026-09-30 by cra-kit 0.1.0. This is a structured self-check against Regulation (EU) 2024/2847, not legal advice.
+Generated 2026-09-30 by cra-kit 0.2.0. This is a structured self-check against Regulation (EU) 2024/2847, not legal advice.
 
 ## Summary
 
@@ -32,7 +32,7 @@ Matched categories:
 | ID | Requirement | Status | Evidence and notes |
 | --- | --- | --- | --- |
 | I.1 | Designed, developed and produced to ensure an appropriate level of cybersecurity based on the risks | Partial |  |
-| I.2a | Made available on the market without known exploitable vulnerabilities | At risk | dependency scan found known vulnerabilities in 2 components, 1 of them listed as exploited in the wild (CISA KEV) |
+| I.2a | Made available on the market without known exploitable vulnerabilities | At risk | 1 dependency advisory closed by recorded VEX decisions (cra-kit.vex.json); dependency scan found known vulnerabilities in 1 component, 1 of them listed as exploited in the wild (CISA KEV) |
 | I.2b | Made available with a secure by default configuration, including the possibility to reset to the original state | Done |  |
 | I.2c | Vulnerabilities can be addressed through security updates (automatic updates by default where applicable, with an opt-out) | Done | Signed OTA updates, automatic by default, opt-out in the app |
 | I.2d | Protection from unauthorised access by appropriate control mechanisms (authentication, identity or access management) | Done |  |

@@ -3,11 +3,34 @@
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-02
+
+### Added
+
+- **pnpm and yarn lockfiles**: `pnpm-lock.yaml` (v5.x, v6, v9) and `yarn.lock` (classic v1 and Berry v2+),
+  including workspaces, aliases, peer-dependency variants and yarn's `patch:` protocol. Development dependencies are
+  excluded by walking the dependency graph from `package.json`. Fixtures are real lockfiles from pnpm 7/8/9, yarn 1
+  and yarn 4, checked against npm's resolution of the same project.
+- **VEX**: `cra-kit vex add` and `cra-kit vex list` record decisions as OpenVEX v0.2.0. `cra-kit scan --vex` (default
+  `./cra-kit.vex.json`) reads OpenVEX and CycloneDX VEX. `not_affected` and `fixed` findings are closed: listed
+  separately, excluded from counts and `--fail-on`, never hidden. The readiness report cites them as evidence.
+- **GitHub Action** (`action.yml`): SBOM and scan in CI, report in the job summary, error annotations for open
+  known-exploited findings, step outputs, `fail-on` gate.
+- **`cra-kit techfile`**: drafts of the technical documentation (Annex VII), EU declaration of conformity (Annex V),
+  simplified declaration (Annex VI) and user information (Annex II), prefilled from settings, readiness answers,
+  SBOM, scan and VEX. Never overwrites existing files without `--force`.
+- `cra-kit.toml`: optional `manufacturer_address`, `website`, `intended_purpose`, `declaration_url`.
 
 ### Fixed
 
+- npm: an aliased direct dependency (`"x": "npm:real@1.0.0"`) is now marked direct.
 - No Python traceback when output is piped into a command that stops reading early (for example `| head`).
+
+### Security
+
+- The GitHub Action pauses workflow commands while it prints third-party text, rejects inputs containing line
+  breaks, and passes inputs as environment variables only.
+- Scan reports in Markdown escape HTML, table and link syntax in advisory and VEX text.
 
 ## [0.1.0] - 2026-09-30
 
